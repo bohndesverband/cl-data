@@ -61,7 +61,8 @@ if (nflreadr::get_current_week(TRUE) %in% cup_weeks) {
     dplyr::select(
       season, week, player_id, player_display_name, team, fg_made_distance
     ) %>%
-    tidyr::gather(category, value, fg_made_distance)
+    tidyr::gather(category, value, fg_made_distance) %>%
+    dplyr::mutate(category = "special_teams_yards")
 
   ## punting ----
   player_stats_punting <- nflreadr::load_pbp() %>%
@@ -80,7 +81,8 @@ if (nflreadr::get_current_week(TRUE) %in% cup_weeks) {
     ) %>%
     dplyr::rename(player_id = punter_player_id, player_display_name = name) %>%
     dplyr::select(season, week, player_id, player_display_name, team, punt_yards) %>%
-    tidyr::gather(category, value, punt_yards)
+    tidyr::gather(category, value, punt_yards) %>%
+    dplyr::mutate(category = "special_teams_yards")
 
   ## defense ----
   player_stats_defense <- nflreadr::load_player_stats(stat_type = "defense") %>%
