@@ -1,0 +1,25 @@
+name: "Create and Upload Leagu Cup Data"
+
+on:
+  schedule:
+    # every wednesday at 18 from september to december
+    - cron: "0 18 * 9-12 3"
+  workflow_dispatch:
+
+jobs:
+  handle_war_data:
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - { os: ubuntu-22.04, r: "4.4" }
+    env:
+      GITHUB_PAT: ${{ secrets.GH_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup
+        uses: ./.github/actions/setup-r
+      - name: Data handling
+        run: Rscript -e "source('R/league-cup/league-cup.R', echo = TRUE)"

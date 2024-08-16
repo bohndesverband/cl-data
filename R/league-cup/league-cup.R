@@ -3,7 +3,7 @@ library(nflreadr)
 library(piggyback)
 
 # variables ----
-cup_weeks <- c(3,5,10,15) # needs to be updated each year before the season starts
+cup_weeks <- c(5,7,13,16) # needs to be updated each year before the season starts
 current_season <- nflreadr::get_current_season(TRUE)
 current_week <- nflreadr::get_current_week(TRUE)
 
