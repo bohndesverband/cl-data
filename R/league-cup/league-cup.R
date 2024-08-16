@@ -3,14 +3,57 @@ library(nflreadr)
 library(piggyback)
 
 # variables ----
-cup_weeks <- c(3,5,10,15)
-current_season <- nflreadr::get_current_season()
+cup_weeks <- c(3,5,10,15) # needs to be updated each year before the season starts
+current_season <- nflreadr::get_current_season(TRUE)
 current_week <- nflreadr::get_current_week(TRUE)
-current_week <- 3
 
-if (nflreadr::get_current_week(TRUE) %in% cup_weeks) {
-  # load mfl chat messages ----
-  messages <- xml2::read_xml(paste0("https://www45.myfantasyleague.com/fflnetdynamic", nflreadr::get_current_season(TRUE), "/54277_chat.xml")) %>%
+# load nflschedule data ----
+# if week is before cup week
+if (current_week - 1 %in% cup_weeks) {
+  nflSchedule <- nflreadr::load_schedules(nflreadr::get_current_week(TRUE)) %>%
+    dplyr::filter(week %in% cup_weeks) %>%
+    dplyr::select(game_id, season, week, home_team, away_team, gameday, gametime) %>%
+    dplyr::group_by(game_id) %>%
+    tidyr::uncount(2) %>%
+    dplyr::mutate(
+      team = ifelse(dplyr::row_number() == 1, home_team, away_team)
+    ) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(
+      team = nflreadr::clean_team_abbrs(team),
+      team = dplyr::case_when(
+        team == "GB" ~ "GBP",
+        team == "LA" ~ "LAR",
+        team == "KC" ~ "KCC",
+        team == "LV" ~ "LVR",
+        team == "NE" ~ "NEP",
+        team == "NO" ~ "NOS",
+        team == "SF" ~ "SFO",
+        team == "TB" ~ "TBB",
+        TRUE ~ team
+      ),
+      # create EST timestamp from gameday and gametime
+      timestamp = as.POSIXct(paste(gameday, gametime), format = "%Y-%m-%d %H:%M", tz = "America/New_York"),
+      # convert timestamp to berlin and take care of summer time
+      timestamp = format(timestamp, tz = "Europe/Berlin")
+    ) %>%
+    dplyr::select(-dplyr::ends_with("_team"), -dplyr::starts_with("game")) %>%
+    dplyr::group_by(season, week) %>%
+    tidyr::nest(
+      teams = c(team, timestamp)
+    )
+
+  cli::cli_alert_info("Write nfl schedule Data")
+  jsonlite::write_json(nflSchedule, paste0("nfl-schedule-", current_season, ".json"))
+
+  cli::cli_alert_info("Upload nfl schedule Data")
+  piggyback::pb_upload(paste0("nfl-schedule-", current_season, ".csv"), "bohndesverband/cl-data", "league_cup", overwrite = TRUE)
+}
+
+# load player data ----
+if (current_week %in% cup_weeks) {
+  ## load mfl chat messages ----
+  messages <- xml2::read_xml(paste0("https://www45.myfantasyleague.com/fflnetdynamic", current_season, "/54277_chat.xml")) %>%
     xml2::xml_contents() %>%
     xml2::xml_attrs() %>%
     dplyr::tibble() %>%
@@ -43,8 +86,8 @@ if (nflreadr::get_current_week(TRUE) %in% cup_weeks) {
     dplyr::distinct() %>%
     dplyr::pull()
 
-  # nflreadr data ----
-  ## offense ----
+  ## nflreadr data ----
+  ### offense ----
   player_stats_offense <- nflreadr::load_player_stats(stat_type = "offense") %>%
     dplyr::filter(week == current_week) %>%
     dplyr::mutate(
@@ -55,7 +98,7 @@ if (nflreadr::get_current_week(TRUE) %in% cup_weeks) {
     dplyr::rename(team = recent_team) %>%
     tidyr::gather(category, value, c(passing_yards:turnover))
 
-  ## kicking ----
+  ### kicking ----
   player_stats_kicking <- nflreadr::load_player_stats(stat_type = "kicking") %>%
     dplyr::filter(week == current_week) %>%
     dplyr::select(
@@ -64,7 +107,7 @@ if (nflreadr::get_current_week(TRUE) %in% cup_weeks) {
     tidyr::gather(category, value, fg_made_distance) %>%
     dplyr::mutate(category = "special_teams_yards")
 
-  ## punting ----
+  ### punting ----
   player_stats_punting <- nflreadr::load_pbp() %>%
     dplyr::filter(play_type == "punt" & punt_attempt == 1 & week == current_week) %>%
     dplyr::group_by(punter_player_id) %>%
@@ -84,19 +127,19 @@ if (nflreadr::get_current_week(TRUE) %in% cup_weeks) {
     tidyr::gather(category, value, punt_yards) %>%
     dplyr::mutate(category = "special_teams_yards")
 
-  ## defense ----
+  ### defense ----
   player_stats_defense <- nflreadr::load_player_stats(stat_type = "defense") %>%
     dplyr::filter(week == current_week) %>%
     dplyr::mutate(def_turnover = def_interceptions + def_fumbles_forced) %>%
     dplyr::select(season, week, player_id, player_display_name, team, def_tackles, def_tackles_for_loss, def_sacks, def_qb_hits, def_turnover) %>%
     tidyr::gather(category, value, c(def_tackles:def_turnover))
 
-  ##  snap counts ----
+  ###  snap counts ----
   player_snap_counts <- nflreadr::load_snap_counts() %>%
     dplyr::filter(week == current_week) %>%
     dplyr::select(pfr_player_id, week, offense_snaps, defense_snaps, st_snaps)
 
-  ## combine ----
+  ### combine ----
   player_stats <- messages %>%
     dplyr::left_join(
       nflreadr::load_ff_playerids() %>%
@@ -127,7 +170,7 @@ if (nflreadr::get_current_week(TRUE) %in% cup_weeks) {
       snaps = sum(offense_snaps, defense_snaps, st_snaps, na.rm = TRUE)
     )
 
-  # create winner/loser data----
+  ## create winner/loser data----
   category_sums <- player_stats %>%
     dplyr::select(game_id, team_id, category, cat_sum, player_count) %>%
     dplyr::distinct() %>%
@@ -206,7 +249,7 @@ if (nflreadr::get_current_week(TRUE) %in% cup_weeks) {
     tidyr::fill(winner) %>%
     dplyr::ungroup()
 
-  # create output data ----
+  ## create output data ----
   output_data <- player_stats %>%
     dplyr::left_join(
       category_wins,
@@ -240,7 +283,7 @@ if (nflreadr::get_current_week(TRUE) %in% cup_weeks) {
   cli::cli_alert_info("Upload csv Data")
   piggyback::pb_upload(paste0("league-cup-", current_season, ".csv"), "bohndesverband/cl-data", "league_cup", overwrite = TRUE)
 
-  # convert to json ----
+  ## convert to json ----
   json_data <- df_to_json %>%
     dplyr::filter(value > 0) %>%
     tidyr::nest(
