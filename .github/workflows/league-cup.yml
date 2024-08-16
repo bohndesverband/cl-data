@@ -23,3 +23,5 @@ jobs:
         uses: ./.github/actions/setup-r
       - name: Data handling
         run: Rscript -e "source('R/league-cup/league-cup.R', echo = TRUE)"
+      - name: List files
+        run: ls -R
