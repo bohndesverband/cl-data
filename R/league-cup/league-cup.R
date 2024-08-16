@@ -9,8 +9,8 @@ current_week <- nflreadr::get_current_week(TRUE)
 
 # load nflschedule data ----
 # if week is before cup week
-if (current_week - 1 %in% cup_weeks) {
-  nflSchedule <- nflreadr::load_schedules(nflreadr::get_current_week(TRUE)) %>%
+if (as.numeric(nflreadr::get_current_week() - 1) %in% cup_weeks) {
+  nflSchedule <- nflreadr::load_schedules(current_season) %>%
     dplyr::filter(week %in% cup_weeks) %>%
     dplyr::select(game_id, season, week, home_team, away_team, gameday, gametime) %>%
     dplyr::group_by(game_id) %>%
@@ -47,7 +47,7 @@ if (current_week - 1 %in% cup_weeks) {
   jsonlite::write_json(nflSchedule, paste0("nfl-schedule-", current_season, ".json"))
 
   cli::cli_alert_info("Upload nfl schedule Data")
-  piggyback::pb_upload(paste0("nfl-schedule-", current_season, ".csv"), "bohndesverband/cl-data", "league_cup", overwrite = TRUE)
+  piggyback::pb_upload(paste0("nfl-schedule-", current_season, ".json"), "bohndesverband/cl-data", "league_cup", overwrite = TRUE)
 }
 
 # load player data ----
