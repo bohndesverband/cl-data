@@ -15,4 +15,4 @@ runs:
         use-public-rspm: true
     - name: Install dependencies
       shell: bash
-      run: Rscript -e "install.packages(c('nflreadr', 'piggyback', 'tidyverse', 'git2r'))"
+      run: Rscript -e "install.packages(c('nflreadr', 'piggyback', 'tidyverse'))"
