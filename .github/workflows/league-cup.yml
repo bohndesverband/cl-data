@@ -25,9 +25,13 @@ jobs:
         uses: ./.github/actions/setup-r
       - name: Data handling
         run: Rscript -e "source('R/league-cup/league-cup.R', echo = TRUE)"
-      - name: GIT Commit
+      - name: Add new files to git
+        run: |
+          git add nfl-schedule-*.json
+          git add league-cup-*.json
+      - name: Git Commit and Push
         run: |
           git config --global user.name "${{ env.CI_COMMIT_AUTHOR }}"
           git config --global user.email "action@github.com"
-          git commit -a -m "${{ env.CI_COMMIT_MESSAGE }}"
+          git commit -m "${{ env.CI_COMMIT_MESSAGE }}"
           git push
