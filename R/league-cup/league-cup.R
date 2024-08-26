@@ -1,7 +1,7 @@
 library(tidyverse)
 library(nflreadr)
 library(piggyback)
-library(git2r)
+#library(git2r)
 
 # variables ----
 cup_weeks <- c(5,7,13,16) # needs to be updated each year before the season starts
@@ -52,14 +52,14 @@ if (as.numeric(nflreadr::get_current_week() - 1) %in% cup_weeks) {
   piggyback::pb_upload(paste0("nfl-schedule-", current_season, ".json"), "bohndesverband/cl-data", "league_cup", overwrite = TRUE)
 
   # create commit
-  git2r::add(git2r::repository(), paste0("nfl-schedule-", current_season, ".json"))
+  #git2r::add(git2r::repository(), paste0("nfl-schedule-", current_season, ".json"))
 
-  commit_message <- "add nfl schedule data"
-  git2r::commit(git2r::repository(), commit_message)
+  #commit_message <- "add nfl schedule data"
+  #git2r::commit(git2r::repository(), commit_message)
 
   # push
-  credentials <- git2r::cred_token()
-  push(git2r::repository(), credentials = credentials)
+  #credentials <- git2r::cred_token()
+  #push(git2r::repository(), credentials = credentials)
 }
 
 # load player data ----
