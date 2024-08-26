@@ -16,6 +16,8 @@ jobs:
           - { os: ubuntu-22.04, r: "4.4" }
     env:
       GITHUB_PAT: ${{ secrets.GH_TOKEN }}
+      CI_COMMIT_MESSAGE: Added league Cup Data via Pipeline
+      CI_COMMIT_AUTHOR: Github Action
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,3 +25,9 @@ jobs:
         uses: ./.github/actions/setup-r
       - name: Data handling
         run: Rscript -e "source('R/league-cup/league-cup.R', echo = TRUE)"
+      - name: GIT Commit
+        run: |
+          git config --global user.name "${{ env.CI_COMMIT_AUTHOR }}"
+          git config --global user.email "action@github.com"
+          git commit -a -m "${{ env.CI_COMMIT_MESSAGE }}"
+          git push
