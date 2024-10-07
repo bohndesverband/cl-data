@@ -5,10 +5,9 @@ library(piggyback)
 
 # variables ----
 cup_weeks <- c(5,7,13,16) # needs to be updated each year before the season starts
-#current_season <- nflreadr::get_current_season(TRUE)
-current_season <- 2023
-# current_week <- nflreadr::get_current_week(TRUE)
-current_week <- 7
+current_season <- nflreadr::get_current_season(TRUE)
+current_week <- nflreadr::get_current_week(TRUE)
+#current_week <- 4
 
 # load nflschedule data ----
 # if week is before cup week
@@ -77,6 +76,7 @@ if (current_week %in% cup_weeks) {
       game_id = stringr::str_remove(game_id, "gameId:"), # remove gameId:
       team_id = stringr::str_extract(message, "(?<=-team).*?(?=-)"), # get teamId zwischen -team und -
       team_id = stringr::str_remove(team_id, ":"), # remove :
+      game_id = ifelse(game_id == "1-0005-0006", "1-0010-0006", game_id), # fix game_id
       round = as.integer(stringr::str_extract(game_id, "^[^-]+")), # first number in gameId to first "-"
       week = as.integer(cup_weeks[round]),  # get cup_weeks[n] where n equals the round
       player_id = stringr::str_extract(message, "\\[([^\\]]+)\\]"), # get player_id between []
@@ -171,7 +171,7 @@ if (current_week %in% cup_weeks) {
     dplyr::filter(!is.na(category)) %>%
     dplyr::group_by(round, team_id, category) %>%
     dplyr::mutate(
-      player_count = n(),
+      player_count = sum(value != 0),
       cat_sum = sum(value),
       season = nflreadr::get_current_season(),
       game_id = paste(season, game_id, sep = "-")
@@ -223,6 +223,7 @@ if (current_week %in% cup_weeks) {
         cat_result == 0 ~ opponent_id
       )
     ) %>%
+    #filter(category == "turnover")
     dplyr::group_by(game_id, team_id) %>%
     dplyr::mutate(
       franchise_score = sum(cat_result)
@@ -278,9 +279,6 @@ if (current_week %in% cup_weeks) {
   if(current_round == 1) {
     df_to_json <- output_data
   } else {
-    cli::cli_alert_info("Write Data")
-    readr::write_csv(war, paste0("rfl_war_", current_season, ".csv"))
-
     old_data <- readr::read_csv(paste0("https://github.com/bohndesverband/cl-data/releases/download/league_cup/league-cup-", current_season, ".csv"))
 
     df_to_json <- rbind(
@@ -298,7 +296,6 @@ if (current_week %in% cup_weeks) {
 
   ## convert to json ----
   json_data <- df_to_json %>%
-    dplyr::filter(value > 0) %>%
     tidyr::nest(
       players = c(player_id, player_display_name, position, team, value, snaps)
     ) %>%
