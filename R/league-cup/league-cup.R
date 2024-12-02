@@ -1,5 +1,5 @@
 library(tidyverse)
-library(nflreadr)
+library(nflfastR)
 library(piggyback)
 #library(git2r)
 
@@ -7,7 +7,7 @@ library(piggyback)
 cup_weeks <- c(5,7,13,16) # needs to be updated each year before the season starts
 current_season <- nflreadr::get_current_season(TRUE)
 current_week <- nflreadr::get_current_week(TRUE)
-#current_week <- 4
+#current_week <- 13
 
 # load nflschedule data ----
 # if week is before cup week
@@ -26,6 +26,7 @@ if (as.numeric(nflreadr::get_current_week() - 1) %in% cup_weeks) {
       team = dplyr::case_when(
         team == "GB" ~ "GBP",
         team == "LA" ~ "LAR",
+        team == "JAX" ~ "JAC",
         team == "KC" ~ "KCC",
         team == "LV" ~ "LVR",
         team == "NE" ~ "NEP",
@@ -99,26 +100,18 @@ if (current_week %in% cup_weeks) {
     dplyr::distinct() %>%
     dplyr::pull()
 
-  ## nflreadr data ----
-  ### offense ----
-  player_stats_offense <- nflreadr::load_player_stats(stat_type = "offense") %>%
+  ## player stats ----
+  player_stats_all <- nflfastR::calculate_stats(current_season, "week", "player", "REG") %>%
     dplyr::filter(week == current_week) %>%
     dplyr::mutate(
-      touchdowns = passing_tds + rushing_tds + receiving_tds + special_teams_tds,
-      turnover = interceptions + sack_fumbles_lost + rushing_fumbles_lost + receiving_fumbles_lost
+      touchdowns = passing_tds + rushing_tds + receiving_tds + special_teams_tds + def_tds + fumble_recovery_tds,
+      turnover = passing_interceptions + sack_fumbles_lost + rushing_fumbles_lost + receiving_fumbles_lost,
+      def_turnover = def_interceptions + def_fumbles_forced,
+      def_tackles = def_tackles_solo + def_tackles_with_assist + def_tackle_assists
     ) %>%
-    dplyr::select(season, week, player_id, player_display_name, recent_team, passing_yards, rushing_yards, receiving_yards, touchdowns, turnover) %>%
-    dplyr::rename(team = recent_team) %>%
-    tidyr::gather(category, value, c(passing_yards:turnover))
-
-  ### kicking ----
-  player_stats_kicking <- nflreadr::load_player_stats(stat_type = "kicking") %>%
-    dplyr::filter(week == current_week) %>%
-    dplyr::select(
-      season, week, player_id, player_display_name, team, fg_made_distance
-    ) %>%
-    tidyr::gather(category, value, fg_made_distance) %>%
-    dplyr::mutate(category = "special_teams_yards")
+    dplyr::select(season, week, player_id, player_display_name, team, passing_yards, rushing_yards, receiving_yards, touchdowns, turnover, def_turnover, def_tackles, def_tackles_for_loss, def_sacks, def_qb_hits, fg_made_distance) %>%
+    dplyr::rename("special_teams_yards" = fg_made_distance) %>%
+    tidyr::gather(category, value, c(passing_yards:special_teams_yards))
 
   ### punting ----
   player_stats_punting <- nflreadr::load_pbp() %>%
@@ -140,13 +133,6 @@ if (current_week %in% cup_weeks) {
     tidyr::gather(category, value, punt_yards) %>%
     dplyr::mutate(category = "special_teams_yards")
 
-  ### defense ----
-  player_stats_defense <- nflreadr::load_player_stats(stat_type = "defense") %>%
-    dplyr::filter(week == current_week) %>%
-    dplyr::mutate(def_turnover = def_interceptions + def_fumbles_forced) %>%
-    dplyr::select(season, week, player_id, player_display_name, team, def_tackles, def_tackles_for_loss, def_sacks, def_qb_hits, def_turnover) %>%
-    tidyr::gather(category, value, c(def_tackles:def_turnover))
-
   ###  snap counts ----
   player_snap_counts <- nflreadr::load_snap_counts() %>%
     dplyr::filter(week == current_week) %>%
@@ -164,7 +150,7 @@ if (current_week %in% cup_weeks) {
       by = c("pfr_id" = "pfr_player_id", "week")
     ) %>%
     dplyr::left_join(
-      rbind(player_stats_offense, player_stats_defense, player_stats_kicking, player_stats_punting),
+      rbind(player_stats_all, player_stats_punting),
       by = c("gsis_id" = "player_id", "week"),
       relationship = "many-to-many"
     ) %>%
@@ -236,6 +222,8 @@ if (current_week %in% cup_weeks) {
     dplyr::distinct() %>%
     dplyr::left_join(
       player_stats %>%
+        dplyr::select(game_id, team_id, snaps) %>%
+        dplyr::distinct() %>%
         dplyr::group_by(game_id, team_id) %>%
         dplyr::summarise(
           snaps_sum = sum(snaps, na.rm = TRUE),
@@ -244,7 +232,6 @@ if (current_week %in% cup_weeks) {
       by = c("game_id", "team_id")
     ) %>%
     dplyr::group_by(game_id) %>%
-    dplyr::arrange(team_id) %>%
     dplyr::mutate(
       opponent_score = ifelse(dplyr::row_number() == 1, dplyr::lead(franchise_score), dplyr::lag(franchise_score)),
       matchup_result = dplyr::case_when(
@@ -261,7 +248,10 @@ if (current_week %in% cup_weeks) {
     dplyr::select(-dplyr::ends_with("_score")) %>%
     dplyr::arrange(winner) %>%
     tidyr::fill(winner) %>%
-    dplyr::ungroup()
+    dplyr::ungroup() %>%
+    dplyr::mutate(
+      matchup_result = ifelse(winner == team_id, 1, 0)
+    )
 
   ## create output data ----
   output_data <- player_stats %>%
@@ -279,7 +269,9 @@ if (current_week %in% cup_weeks) {
   if(current_round == 1) {
     df_to_json <- output_data
   } else {
-    old_data <- readr::read_csv(paste0("https://github.com/bohndesverband/cl-data/releases/download/league_cup/league-cup-", current_season, ".csv"))
+    piggyback::pb_download(paste0("league-cup-", current_season, ".csv"), repo = "bohndesverband/cl-data", tag = "league_cup")
+
+    old_data <- readr::read_csv(paste0("league-cup-", current_season, ".csv"))
 
     df_to_json <- rbind(
       old_data %>%
