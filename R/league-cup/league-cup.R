@@ -7,11 +7,11 @@ library(piggyback)
 cup_weeks <- c(5,7,13,16) # needs to be updated each year before the season starts
 current_season <- nflreadr::get_current_season(TRUE)
 current_week <- nflreadr::get_current_week(TRUE)
-#current_week <- 13
+#current_week <- 16
 
 # load nflschedule data ----
 # if week is before cup week
-if (as.numeric(nflreadr::get_current_week() - 1) %in% cup_weeks) {
+if (as.numeric(nflreadr::get_current_week()) %in% cup_weeks) {
   nflSchedule <- nflreadr::load_schedules(current_season) %>%
     dplyr::filter(week %in% cup_weeks) %>%
     dplyr::select(game_id, season, week, home_team, away_team, gameday, gametime) %>%
